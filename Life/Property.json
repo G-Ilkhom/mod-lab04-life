@@ -1,0 +1,7 @@
+{
+    "BoardWidth": 40,
+    "BoardHeight": 20,
+    "BoardCellSize": 1,
+    "LifeDensity": 0.8
+
+}
