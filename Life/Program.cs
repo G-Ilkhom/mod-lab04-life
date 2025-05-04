@@ -53,12 +53,17 @@ namespace cli_life
 
         public static void LoadBoard(Cell[,] grid, string path)
         {
+            for (int x = 0; x < grid.GetLength(0); x++)
+                for (int y = 0; y < grid.GetLength(1); y++)
+                    grid[x, y].IsAlive = false;
+
             var lines = File.ReadAllLines(path);
             for (int y = 0; y < lines.Length && y < grid.GetLength(1); y++)
             {
-                for (int x = 0; x < lines[y].Length && x < grid.GetLength(0); x++)
+                var line = lines[y];
+                for (int x = 0; x < line.Length && x < grid.GetLength(0); x++)
                 {
-                    grid[x, y].IsAlive = lines[y][x] == '1';
+                    grid[x, y].IsAlive = line[x] == '1';
                 }
             }
         }
@@ -88,29 +93,32 @@ namespace cli_life
     {
         public Cell[,] Grid;
         public readonly int CellSize;
-        private readonly Random _rng = new();
+        private readonly Random rnd = new();
         public bool[,] Visited;
 
         public int Columns => Grid.GetLength(0);
         public int Rows => Grid.GetLength(1);
 
-        public LifeBoard(int width, int height, int size, double density)
+        public LifeBoard(int width, int height, int size, double density, int? seed = null)
         {
             CellSize = size;
-            Grid = new Cell[width / size, height / size];
+            int columns = (width + size - 1) / size;
+            int rows = (height + size - 1) / size;
 
-            for (int x = 0; x < Columns; x++)
-                for (int y = 0; y < Rows; y++)
+            Grid = new Cell[columns, rows];
+            Visited = new bool[columns, rows];
+
+            for (int x = 0; x < columns; x++)
+                for (int y = 0; y < rows; y++)
                     Grid[x, y] = new Cell();
-
+            rnd = seed is not null ? new Random(seed.Value) : new Random();
             Randomize(density);
-            Visited = new bool[Columns, Rows];
         }
 
         public void Randomize(double density)
         {
             foreach (var cell in Grid)
-                cell.IsAlive = _rng.NextDouble() < density;
+                cell.IsAlive = rnd.NextDouble() < density;
         }
 
         public void Advance()
