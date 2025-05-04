@@ -5,4 +5,10 @@
     <TargetFramework>netcoreapp8.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Update="Property.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

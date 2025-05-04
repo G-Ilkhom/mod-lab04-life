@@ -1,253 +1,200 @@
 using Xunit;
 using cli_life;
-using System.IO;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Life.Tests
 {
-    public class CellTests
+    public class LifeBoardTests
     {
-        [Fact]
-        public void Cell_DetermineNextLiveState1()
+        private LifeBoard CreateBoard(int w, int h) => new LifeBoard(w, h, 1, 0);
+
+        private static HashSet<(int x, int y)> GetAlive(LifeBoard b)
         {
-            var cell = new Cell { IsAlive = true };
-            cell.neighbors.AddRange(Enumerable.Repeat(new Cell { IsAlive = true }, 1));
-            cell.DetermineNextLiveState();
-            Assert.False(cell.IsAliveNext);
+            var alive = new HashSet<(int x, int y)>();
+            int width = b.Grid.GetLength(0);
+            int height = b.Grid.GetLength(1);
+            for (int x = 0; x < width; x++)
+                for (int y = 0; y < height; y++)
+                    if (b.Grid[x, y].IsAlive)
+                        alive.Add((x, y));
+            return alive;
+        }
+
+        private static void AssertCellsEqual(IEnumerable<(int x, int y)> expected, HashSet<(int x, int y)> actual)
+        {
+            var exp = expected.OrderBy(c => c.x).ThenBy(c => c.y).ToList();
+            var act = actual.OrderBy(c => c.x).ThenBy(c => c.y).ToList();
+            Assert.Equal(exp, act);
         }
 
         [Fact]
-        public void Cell_DetermineNextLiveState2()
+        public void DeadBoard_RemainsEmpty()
         {
-            var cell = new Cell { IsAlive = true };
-            cell.neighbors.AddRange(Enumerable.Repeat(new Cell { IsAlive = true }, 2));
-            cell.DetermineNextLiveState();
-            Assert.True(cell.IsAliveNext);
+            var b = CreateBoard(5, 5);
+            b.Advance();
+            Assert.Empty(GetAlive(b));
         }
 
         [Fact]
-        public void Cell_DetermineNextLiveState3()
+        public void SingleCell_DiesNextGeneration()
         {
-            var cell = new Cell { IsAlive = false };
-            cell.neighbors.AddRange(Enumerable.Repeat(new Cell { IsAlive = true }, 3));
-            cell.DetermineNextLiveState();
-            Assert.True(cell.IsAliveNext);
+            var b = CreateBoard(5, 5);
+            b.Grid[2, 2].IsAlive = true;
+            b.Advance();
+            Assert.Empty(GetAlive(b));
         }
 
         [Fact]
-        public void Cell_DetermineNextLiveState4()
+        public void PairCells_BothDie()
         {
-            var cell = new Cell { IsAlive = true };
-            cell.neighbors.AddRange(Enumerable.Repeat(new Cell { IsAlive = true }, 4));
-            cell.DetermineNextLiveState();
-            Assert.False(cell.IsAliveNext);
+            var b = CreateBoard(5, 5);
+            b.Grid[1, 1].IsAlive = true;
+            b.Grid[1, 2].IsAlive = true;
+            b.Advance();
+            Assert.Empty(GetAlive(b));
         }
 
         [Fact]
-        public void Cell_DetermineNextLiveState5()
+        public void ThreeHorizontal_FormsVertical()
         {
-            var cell = new Cell { IsAlive = false };
-            cell.neighbors.AddRange(Enumerable.Repeat(new Cell { IsAlive = true }, 3));
-            cell.DetermineNextLiveState();
-            Assert.True(cell.IsAliveNext);
-        }
-    }
-
-    public class BoardTests
-    {
-        [Fact]
-        public void Board_InitializesCorrectSize()
-        {
-            var board = new Board(100, 100, 10);
-            Assert.Equal(10, board.Columns);
-            Assert.Equal(10, board.Rows);
+            var b = CreateBoard(5, 5);
+            var init = new[] { (1, 2), (2, 2), (3, 2) };
+            foreach (var (x, y) in init)
+                b.Grid[x, y].IsAlive = true;
+            b.Advance();
+            var expected = new[] { (2, 1), (2, 2), (2, 3) };
+            AssertCellsEqual(expected, GetAlive(b));
         }
 
         [Fact]
-        public void BoardNeighbors()
+        public void ThreeVertical_ReturnsToHorizontalAfterTwoSteps()
         {
-            var board = new Board(3, 3, 1);
-            var centerCell = board.Cells[1, 1];
-            Assert.Equal(8, centerCell.neighbors.Count);
+            var b = CreateBoard(5, 5);
+            var init = new[] { (2, 1), (2, 2), (2, 3) };
+            foreach (var (x, y) in init)
+                b.Grid[x, y].IsAlive = true;
+            b.Advance();
+            b.Advance();
+            var expected = new[] { (1, 2), (2, 2), (3, 2) };
+            AssertCellsEqual(expected, GetAlive(b));
         }
 
         [Fact]
-        public void Randomize_SetsAliveCells()
+        public void Block_StaysStable()
         {
-            var board = new Board(100, 100, 10);
-            board.Randomize(0.5);
-            Assert.Contains(board.Cells.Cast<Cell>(), c => c.IsAlive);
+            var b = CreateBoard(4, 4);
+            var init = new[] { (1, 1), (1, 2), (2, 1), (2, 2) };
+            foreach (var c in init) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            b.Advance();
+            AssertCellsEqual(init, GetAlive(b));
         }
 
         [Fact]
-        public void CountElements1()
+        public void Boat_StaysStable()
         {
-            var board = new Board(6, 6, 1);
-            for (int i = 0; i < 6; i++)
-                for (int j = 0; j < 6; j++)
-                    board.Cells[i, j].IsAlive = false;
-
-            board.Cells[0, 0].IsAlive = true;
-            board.Cells[0, 1].IsAlive = true;
-            board.Cells[1, 0].IsAlive = true;
-            board.Cells[1, 1].IsAlive = true;
-
-            board.Cells[3, 1].IsAlive = true;
-            board.Cells[3, 2].IsAlive = true;
-            board.Cells[3, 3].IsAlive = true;
-
-            var (count_cell, count_figures) = board.CountElements();
-            Assert.Equal(7, count_cell);
-            Assert.Equal(2, count_figures);
-        }
-    }
-
-    public class TextControllerTests
-    {
-        readonly string tst_dir = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "Life");
-
-        [Fact]
-        public void Save_LifeFile()
-        {
-            var board = new Board(40, 20, 1);
-            string filePath = Path.Combine(tst_dir, "LifeBoard.txt");
-            board.Randomize(0.5);
-            TextController.Save_life(board.Cells, filePath);
-            Assert.True(File.Exists(filePath));
-            string fileContent = File.ReadAllText(filePath);
-            Assert.False(string.IsNullOrWhiteSpace(fileContent));
-            Assert.Contains("1", fileContent);
+            var b = CreateBoard(5, 5);
+            var init = new[] { (1, 1), (2, 1), (1, 2), (3, 2), (2, 3)};
+            foreach (var c in init) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            b.Advance();
+            AssertCellsEqual(init, GetAlive(b));
         }
 
         [Fact]
-        public void Read_LifeFile()
+        public void Tub_StaysStable()
         {
-            var board = new Board(40, 20, 1);
-            string filePath = Path.Combine(tst_dir, "LifeBoard.txt");
-            TextController.Read_life(board.Cells, filePath);
-            Assert.True(File.Exists(filePath));
-            Assert.NotNull(board.Cells);
-        }
-    }
-
-    public class JSONControllerTests
-    {
-        readonly string tst_dir = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "Life");
-
-        [Fact]
-        public void Load_from_fson()
-        {
-            string property_path = Path.Combine(tst_dir, "Property.json");
-            LifeProperty life_property = JSONController.Load_from_fson(property_path);
-            Assert.Equal(40, life_property.BoardWidth);
-        }
-    }
-
-    public class PatternClassifierTests
-    {
-        readonly string tst_dir = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "Life", "figures");
-
-        [Fact]
-        public void Classify_UnknownPattern()
-        {
-            var classifier = new PatternClassifier(tst_dir);
-            var pattern = new bool[,] { { true, false }, { false, true } };
-            string name = classifier.Classify(pattern);
-            Assert.Equal("Unknown", name);
+            var b = CreateBoard(5, 5);
+            var init = new[] { (2, 1), (1, 2), (3, 2), (2, 3)};
+            foreach (var c in init) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            b.Advance();
+            AssertCellsEqual(init, GetAlive(b));
         }
 
         [Fact]
-        public void Classify_BlockPattern()
+        public void Beehive_StaysStable()
         {
-            var classifier = new PatternClassifier(tst_dir);
-            var pattern = new bool[,] { { true, true }, { true, true } };
-            string name = classifier.Classify(pattern);
-            Assert.Equal("Block", name);
+            var b = CreateBoard(6, 6);
+            var init = new[] { (2, 1), (3, 1), (1, 2), (4, 2), (2, 3), (3, 3)};
+            foreach (var c in init) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            b.Advance();
+            AssertCellsEqual(init, GetAlive(b));
         }
 
         [Fact]
-        public void Classify_BlinkerPattern()
+        public void Glider_MovesDiagonallyAfterFourGenerations()
         {
-            var classifier = new PatternClassifier(tst_dir);
-            var pattern = new bool[,] { { true }, { true }, { true } };
-            string name = classifier.Classify(pattern);
-            Assert.Equal("Blinker", name);
+            var b = CreateBoard(5, 5);
+            var glider = new[] { (1, 0), (2, 1), (0, 2), (1, 2), (2, 2) };
+            foreach (var c in glider) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            for (int i = 0; i < 4; i++) b.Advance();
+            var expected = new[] { (2, 1), (3, 2), (1, 3), (2, 3), (3, 3) };
+            AssertCellsEqual(expected, GetAlive(b));
         }
 
         [Fact]
-        public void Classify_Figures1()
+        public void WrapAround_DetectsNeighborsAcrossEdges()
         {
-            var board = new Board(6, 6, 1);
-            for (int i = 0; i < 6; i++)
-                for (int j = 0; j < 6; j++)
-                    board.Cells[i, j].IsAlive = false;
-
-            board.Cells[0, 0].IsAlive = true;
-            board.Cells[0, 1].IsAlive = true;
-            board.Cells[1, 0].IsAlive = true;
-            board.Cells[1, 1].IsAlive = true;
-
-            board.Cells[2, 3].IsAlive = true;
-            board.Cells[3, 3].IsAlive = true;
-            board.Cells[4, 3].IsAlive = true;
-
-            var classifier = new PatternClassifier(tst_dir);
-            var results = classifier.ClassifyBoard(board);
-
-            Dictionary<string, int> expected = new()
-            {
-                ["Block"] = 1,
-                ["Blinker"] = 1,
-                ["Hive"] = 0,
-                ["Glider"] = 0,
-                ["Boat"] = 0,
-                ["Unknown"] = 0
-            };
-
-            Assert.Equal(expected, results);
+            var b = CreateBoard(3, 3);
+            b.Grid[0, 0].IsAlive = true;
+            b.Grid[2, 0].IsAlive = true;
+            b.Advance();
+            Assert.Empty(GetAlive(b));
         }
 
         [Fact]
-        public void Classify_Figures2()
+        public void Analyze_FullBoardOneCluster()
         {
-            var board = new Board(7, 9, 1);
-            for (int i = 0; i < 7; i++)
-                for (int j = 0; j < 9; j++)
-                    board.Cells[i, j].IsAlive = false;
+            var b = CreateBoard(3, 3);
+            for (int x = 0; x < b.Grid.GetLength(0); x++)
+                for (int y = 0; y < b.Grid.GetLength(1); y++)
+                    b.Grid[x, y].IsAlive = true;
+            var (alive, clusters) = b.Analyze();
+            Assert.Equal(9, alive);
+            Assert.Equal(1, clusters);
+        }
 
-            board.Cells[1, 2].IsAlive = true;
-            board.Cells[1, 3].IsAlive = true;
-            board.Cells[2, 1].IsAlive = true;
-            board.Cells[2, 4].IsAlive = true;
-            board.Cells[3, 2].IsAlive = true;
-            board.Cells[3, 3].IsAlive = true;
+        [Fact]
+        public void Analyze_DisconnectedClusters()
+        {
+            var b = CreateBoard(6, 6);
+            var clusterA = new[] { (1, 1), (1, 2) };
+            var clusterB = new[] { (4, 4), (5, 4), (4, 5) };
+            foreach (var c in clusterA.Concat(clusterB)) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            var (alive, clusters) = b.Analyze();
+            Assert.Equal(5, alive);
+            Assert.Equal(2, clusters);
+        }
 
-            board.Cells[3, 7].IsAlive = true;
-            board.Cells[4, 5].IsAlive = true;
-            board.Cells[4, 7].IsAlive = true;
-            board.Cells[5, 6].IsAlive = true;
-            board.Cells[5, 7].IsAlive = true;
+        [Fact]
+        public void Analyze_MultipleClustersCount()
+        {
+            var b = CreateBoard(3, 3);
+            var coords = new[] { (0, 0), (0, 1), (2, 2), (0, 2) };
+            foreach (var c in coords) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            var (_, clusters) = b.Analyze();
+            Assert.Equal(3, clusters);
+        }
 
-            board.Cells[0, 6].IsAlive = true;
-            board.Cells[0, 7].IsAlive = true;
-            board.Cells[1, 6].IsAlive = true;
-            board.Cells[1, 7].IsAlive = true;
+        [Fact]
+        public void ToadOscillator_TogglesBetweenPhases()
+        {
+            var b = CreateBoard(6, 6);
+            var phase1 = new[] { (2, 2), (3, 2), (4, 2), (1, 3), (2, 3), (3, 3) };
+            foreach (var c in phase1) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            b.Advance();
+            var phase2 = new[] { (3, 1), (3, 4), (2, 2), (4, 2), (2, 3), (4, 3) };
+            AssertCellsEqual(phase2, GetAlive(b));
+        }
 
-            var classifier = new PatternClassifier(tst_dir);
-            var results = classifier.ClassifyBoard(board);
-
-            Dictionary<string, int> expected = new()
-            {
-                ["Block"] = 1,
-                ["Blinker"] = 0,
-                ["Hive"] = 0,
-                ["Glider"] = 1,
-                ["Boat"] = 1,
-                ["Unknown"] = 0
-            };
-
-            Assert.Equal(expected, results);
+        [Fact]
+        public void BeaconOscillator_TogglesBetweenPhases()
+        {
+            var b = CreateBoard(6, 6);
+            var phase1 = new[] { (1, 1), (2, 1), (1, 2), (2, 2), (3, 3), (4, 3), (3, 4), (4, 4) };
+            foreach (var c in phase1) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            b.Advance();
+            var phase2 = new[] { (1, 1), (2, 1), (1, 2), (4, 3), (3, 4), (4, 4) };
+            AssertCellsEqual(phase2, GetAlive(b));
         }
     }
 }

@@ -1,0 +1,11 @@
+Run 1: Generations = 112
+Run 2: Generations = 92 
+Run 3: Generations = 77
+Run 4: Generations = 92  
+Run 5: Generations = 72  
+Run 6: Generations = 85  
+Run 7: Generations = 88  
+Run 8: Generations = 100  
+Run 9: Generations = 96 
+Run 10: Generations = 89  
+Average Generations: 90.3
