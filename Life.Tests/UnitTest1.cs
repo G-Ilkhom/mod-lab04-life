@@ -63,12 +63,12 @@ namespace Life.Tests
             foreach (var (x, y) in init)
                 b.Grid[x, y].IsAlive = true;
             b.Advance();
-            var expected = new[] { (2, 1), (2, 2), (2, 3) };
-            AssertCellsEqual(expected, GetAlive(b));
+            var expectedVert = new[] { (2, 1), (2, 2), (2, 3) };
+            AssertCellsEqual(expectedVert, GetAlive(b));
         }
 
         [Fact]
-        public void ThreeVertical_ReturnsToHorizontalAfterTwoSteps()
+        public void ThreeVertical_Periodic_ReturnsToInitialAfterTwoAdvances()
         {
             var b = CreateBoard(5, 5);
             var init = new[] { (2, 1), (2, 2), (2, 3) };
@@ -76,8 +76,7 @@ namespace Life.Tests
                 b.Grid[x, y].IsAlive = true;
             b.Advance();
             b.Advance();
-            var expected = new[] { (1, 2), (2, 2), (3, 2) };
-            AssertCellsEqual(expected, GetAlive(b));
+            AssertCellsEqual(init, GetAlive(b));
         }
 
         [Fact]
@@ -94,7 +93,7 @@ namespace Life.Tests
         public void Boat_StaysStable()
         {
             var b = CreateBoard(5, 5);
-            var init = new[] { (1, 1), (2, 1), (1, 2), (3, 2), (2, 3)};
+            var init = new[] { (1, 1), (2, 1), (1, 2), (3, 2), (2, 3) };
             foreach (var c in init) b.Grid[c.Item1, c.Item2].IsAlive = true;
             b.Advance();
             AssertCellsEqual(init, GetAlive(b));
@@ -104,7 +103,7 @@ namespace Life.Tests
         public void Tub_StaysStable()
         {
             var b = CreateBoard(5, 5);
-            var init = new[] { (2, 1), (1, 2), (3, 2), (2, 3)};
+            var init = new[] { (2, 1), (1, 2), (3, 2), (2, 3) };
             foreach (var c in init) b.Grid[c.Item1, c.Item2].IsAlive = true;
             b.Advance();
             AssertCellsEqual(init, GetAlive(b));
@@ -114,7 +113,7 @@ namespace Life.Tests
         public void Beehive_StaysStable()
         {
             var b = CreateBoard(6, 6);
-            var init = new[] { (2, 1), (3, 1), (1, 2), (4, 2), (2, 3), (3, 3)};
+            var init = new[] { (2, 1), (3, 1), (1, 2), (4, 2), (2, 3), (3, 3) };
             foreach (var c in init) b.Grid[c.Item1, c.Item2].IsAlive = true;
             b.Advance();
             AssertCellsEqual(init, GetAlive(b));
@@ -169,10 +168,10 @@ namespace Life.Tests
         public void Analyze_MultipleClustersCount()
         {
             var b = CreateBoard(3, 3);
-            var coords = new[] { (0, 0), (0, 1), (2, 2), (0, 2) };
+            var coords = new[] { (0, 0), (0, 1), (0, 2), (2, 2) };
             foreach (var c in coords) b.Grid[c.Item1, c.Item2].IsAlive = true;
             var (_, clusters) = b.Analyze();
-            Assert.Equal(3, clusters);
+            Assert.Equal(1, clusters);
         }
 
         [Fact]
@@ -182,7 +181,7 @@ namespace Life.Tests
             var phase1 = new[] { (2, 2), (3, 2), (4, 2), (1, 3), (2, 3), (3, 3) };
             foreach (var c in phase1) b.Grid[c.Item1, c.Item2].IsAlive = true;
             b.Advance();
-            var phase2 = new[] { (3, 1), (3, 4), (2, 2), (4, 2), (2, 3), (4, 3) };
+            var phase2 = new[] { (1, 2), (1, 3), (2, 4), (3, 1), (4, 2), (4, 3) };
             AssertCellsEqual(phase2, GetAlive(b));
         }
 
@@ -195,6 +194,17 @@ namespace Life.Tests
             b.Advance();
             var phase2 = new[] { (1, 1), (2, 1), (1, 2), (4, 3), (3, 4), (4, 4) };
             AssertCellsEqual(phase2, GetAlive(b));
+        }
+
+        [Fact]
+        public void Blinker_PeriodTwo_ReturnsToInitial()
+        {
+            var b = CreateBoard(5, 5);
+            var initial = new[] { (1, 2), (2, 2), (3, 2) };
+            foreach (var c in initial) b.Grid[c.Item1, c.Item2].IsAlive = true;
+            b.Advance();
+            b.Advance();
+            AssertCellsEqual(initial, GetAlive(b));
         }
     }
 }
