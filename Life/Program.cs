@@ -3,40 +3,40 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
-using System.Threading;
 using System.Text.Json;
+using System.Globalization;
 
 namespace cli_life
 {
-    public class GameSettings
+    public class SimulationConfig
     {
-        public int Width { get; set; }
-        public int Height { get; set; }
-        public int CellSize { get; set; }
+        public int HorizontalUnits { get; set; }
+        public int VerticalUnits { get; set; }
+        public int UnitDimension { get; set; }
         public double InitialDensity { get; set; }
 
-        public GameSettings() { }
-        public GameSettings(int width, int height, int cellSize, double density)
+        public SimulationConfig() { }
+        public SimulationConfig(int horizontalUnits, int verticalUnits, int unitDimension, double density)
         {
-            Width = width;
-            Height = height;
-            CellSize = cellSize;
+            HorizontalUnits = horizontalUnits;
+            VerticalUnits = verticalUnits;
+            UnitDimension = unitDimension;
             InitialDensity = density;
         }
     }
 
     public static class ConfigLoader
     {
-        public static GameSettings LoadFromJson(string path)
+        public static SimulationConfig LoadFromJson(string path)
         {
             string content = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<GameSettings>(content)!;
+            return JsonSerializer.Deserialize<SimulationConfig>(content)!;
         }
     }
 
     public static class FileManager
     {
-        public static void SaveBoard(Cell[,] grid, string path)
+        public static void SaveBoard(GridElement[,] grid, string path)
         {
             using var writer = new StreamWriter(path);
             int rows = grid.GetLength(1);
@@ -45,72 +45,73 @@ namespace cli_life
             {
                 for (int x = 0; x < cols; x++)
                 {
-                    writer.Write(grid[x, y].IsAlive ? '1' : '0');
+                    writer.Write(grid[x, y].FluxState ? '1' : '0');
                 }
                 writer.WriteLine();
             }
         }
 
-        public static void LoadBoard(Cell[,] grid, string path)
+        public static void LoadBoard(GridElement[,] grid, string path)
         {
             for (int x = 0; x < grid.GetLength(0); x++)
                 for (int y = 0; y < grid.GetLength(1); y++)
-                    grid[x, y].IsAlive = false;
+                    grid[x, y].FluxState = false;
 
-            var lines = File.ReadAllLines(path);
-            for (int y = 0; y < lines.Length && y < grid.GetLength(1); y++)
+            var cachedLines = File.ReadAllLines(path);
+            for (int y = 0; y < cachedLines.Length && y < grid.GetLength(1); y++)
             {
-                var line = lines[y];
+                var line = cachedLines[y];
                 for (int x = 0; x < line.Length && x < grid.GetLength(0); x++)
                 {
-                    grid[x, y].IsAlive = line[x] == '1';
+                    grid[x, y].FluxState = line[x] == '1';
                 }
             }
         }
 
-        public static void LoadFigure(Cell[,] grid, string figurePath)
+        public static void LoadFigure(GridElement[,] grid, string figurePath)
         {
-            var lines = File.ReadAllLines(figurePath);
-            int height = lines.Length;
-            int width = lines[0].Length;
+            var cachedLines = File.ReadAllLines(figurePath);
+            int verticalUnits = cachedLines.Length;
+            int horizontalUnits = cachedLines[0].Length;
             var rand = new Random();
-            int offsetX = rand.Next(0, grid.GetLength(0) - width);
-            int offsetY = rand.Next(0, grid.GetLength(1) - height);
+            int offsetX = rand.Next(0, grid.GetLength(0) - horizontalUnits);
+            int offsetY = rand.Next(0, grid.GetLength(1) - verticalUnits);
 
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    grid[offsetX + x, offsetY + y].IsAlive = lines[y][x] == '1';
+            for (int ordinate = 0; ordinate < verticalUnits; ordinate++)
+                for (int abscissa = 0; abscissa < horizontalUnits; abscissa++)
+                    grid[offsetX + abscissa, offsetY + ordinate].FluxState = cachedLines[ordinate][abscissa] == '1';
         }
     }
 
-    public class Cell
+    public class GridElement
     {
-        public bool IsAlive;
+        public bool FluxState;
         public bool NextState;
     }
 
     public class LifeBoard
     {
-        public Cell[,] Grid;
-        public readonly int CellSize;
-        private readonly Random rnd = new();
+        public GridElement[,] Grid;
+        public readonly int UnitDimension;
+        private readonly Random rnd;
         public bool[,] Visited;
 
-        public int Columns => Grid.GetLength(0);
-        public int Rows => Grid.GetLength(1);
+        public int TotalColumns => Grid.GetLength(0);
+        public int TotalRows => Grid.GetLength(1);
 
-        public LifeBoard(int width, int height, int size, double density, int? seed = null)
+        public LifeBoard(int horizontalUnits, int verticalUnits, int size, double density, int? seed = null)
         {
-            CellSize = size;
-            int columns = (width + size - 1) / size;
-            int rows = (height + size - 1) / size;
+            UnitDimension = size;
+            int columns = (horizontalUnits + size - 1) / size;
+            int rows = (verticalUnits + size - 1) / size;
 
-            Grid = new Cell[columns, rows];
+            Grid = new GridElement[columns, rows];
             Visited = new bool[columns, rows];
 
             for (int x = 0; x < columns; x++)
                 for (int y = 0; y < rows; y++)
-                    Grid[x, y] = new Cell();
+                    Grid[x, y] = new GridElement();
+
             rnd = seed is not null ? new Random(seed.Value) : new Random();
             Randomize(density);
         }
@@ -118,27 +119,29 @@ namespace cli_life
         public void Randomize(double density)
         {
             foreach (var cell in Grid)
-                cell.IsAlive = rnd.NextDouble() < density;
+                cell.FluxState = rnd.NextDouble() < density;
         }
 
-        public void Advance()
+        public void ProgressFrame()
         {
-            for (int x = 0; x < Columns; x++)
-                for (int y = 0; y < Rows; y++)
+            for (int gridX = 0; gridX < TotalColumns; gridX++)
+                for (int gridY = 0; gridY < TotalRows; gridY++)
                 {
                     int aliveNeighbors = 0;
                     foreach ((int dx, int dy) in NeighborOffsets())
                     {
-                        int nx = (x + dx + Columns) % Columns;
-                        int ny = (y + dy + Rows) % Rows;
-                        if (Grid[nx, ny].IsAlive) aliveNeighbors++;
+                        int offsetx = (gridX + dx + TotalColumns) % TotalColumns;
+                        int offsety = (gridY + dy + TotalRows) % TotalRows;
+                        if (Grid[offsetx, offsety].FluxState) aliveNeighbors++;
                     }
-                    var cell = Grid[x, y];
-                    cell.NextState = cell.IsAlive ? aliveNeighbors is 2 or 3 : aliveNeighbors == 3;
+                    var cell = Grid[gridX, gridY];
+                    cell.NextState = cell.FluxState
+                        ? (aliveNeighbors == 2 || aliveNeighbors == 3)
+                        : (aliveNeighbors == 3);
                 }
 
             foreach (var cell in Grid)
-                cell.IsAlive = cell.NextState;
+                cell.FluxState = cell.NextState;
         }
 
         public (int aliveCount, int clusters) Analyze()
@@ -146,9 +149,9 @@ namespace cli_life
             int total = 0, groupCount = 0;
             Array.Clear(Visited, 0, Visited.Length);
 
-            for (int x = 0; x < Columns; x++)
-                for (int y = 0; y < Rows; y++)
-                    if (!Visited[x, y] && Grid[x, y].IsAlive)
+            for (int x = 0; x < TotalColumns; x++)
+                for (int y = 0; y < TotalRows; y++)
+                    if (!Visited[x, y] && Grid[x, y].FluxState)
                     {
                         int size = FloodFillIterative(x, y);
                         total += size;
@@ -160,35 +163,35 @@ namespace cli_life
 
         private int FloodFillIterative(int startX, int startY)
         {
-            int count = 0;
-            Stack<(int, int)> stack = new();
+            int neighborAccumulator = 0;
+            var stack = new Stack<(int, int)>();
             stack.Push((startX, startY));
 
             while (stack.Count > 0)
             {
                 var (x, y) = stack.Pop();
-                if (Visited[x, y] || !Grid[x, y].IsAlive) continue;
+                if (Visited[x, y] || !Grid[x, y].FluxState) continue;
 
                 Visited[x, y] = true;
-                count++;
+                neighborAccumulator++;
 
                 foreach ((int dx, int dy) in NeighborOffsets())
                 {
-                    int nx = (x + dx + Columns) % Columns;
-                    int ny = (y + dy + Rows) % Rows;
-                    if (!Visited[nx, ny] && Grid[nx, ny].IsAlive)
-                        stack.Push((nx, ny));
+                    int offsetx = (x + dx + TotalColumns) % TotalColumns;
+                    int offsety = (y + dy + TotalRows) % TotalRows;
+                    if (!Visited[offsetx, offsety] && Grid[offsetx, offsety].FluxState)
+                        stack.Push((offsetx, offsety));
                 }
             }
-            return count;
+            return neighborAccumulator;
         }
 
         private IEnumerable<(int, int)> NeighborOffsets()
         {
-            for (int dx = -1; dx <= 1; dx++)
-                for (int dy = -1; dy <= 1; dy++)
-                    if (dx != 0 || dy != 0)
-                        yield return (dx, dy);
+            for (int deltax = -1; deltax <= 1; deltax++)
+                for (int deltay = -1; deltay <= 1; deltay++)
+                    if (deltax != 0 || deltay != 0)
+                        yield return (deltax, deltay);
         }
     }
 
@@ -196,12 +199,16 @@ namespace cli_life
     {
         public static void Main(string[] args)
         {
-            string baseDir = Directory.GetCurrentDirectory();
-            string configPath = Path.Combine(baseDir, "Property.json");
-            string savePath = Path.Combine(baseDir, "Board.txt");
-            var game = new Game(configPath, savePath);
+            string projectRoot = GetProjectRootDirectory();
+            string configPath = Path.Combine(projectRoot, "Property.json");
+
+            var game = new Game(configPath, silent: true);
             game.GenerateDensityData();
-            game.RunBatchAnalysis();
+        }
+
+        public static string GetProjectRootDirectory()
+        {
+            return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\.."));
         }
     }
 
@@ -211,24 +218,31 @@ namespace cli_life
         private int _stableCounter = 0;
         private int _previousClusters = 0;
         private int _generation = 0;
-        private const int StabilityThreshold = 5;
 
         private readonly string _configPath;
-        private readonly string _savePath;
+        private readonly bool _silent;
 
-        public Game(string configPath, string savePath)
+        public Game(string configPath, bool silent = true)
         {
             _configPath = configPath;
-            _savePath = savePath;
-            var settings = ConfigLoader.LoadFromJson(configPath);
-            _board = new LifeBoard(settings.Width, settings.Height, settings.CellSize, settings.InitialDensity);
+            _silent = silent;
+            var settings = ConfigLoader.LoadFromJson(_configPath);
+            _board = new LifeBoard(
+                settings.HorizontalUnits,
+                settings.VerticalUnits,
+                settings.UnitDimension,
+                settings.InitialDensity
+            );
         }
 
         public void Run()
         {
             while (true)
             {
-                if (!HandleInput()) break;
+                if (!_silent && !HandleInput()) break;
+
+                if (_generation >= 100) break;
+
                 if (Update()) break;
             }
         }
@@ -240,10 +254,16 @@ namespace cli_life
             switch (key)
             {
                 case ConsoleKey.S:
-                    FileManager.SaveBoard(_board.Grid, _savePath);
+                    FileManager.SaveBoard(
+                        _board.Grid,
+                        Path.Combine(Program.GetProjectRootDirectory(), "Board.txt")
+                    );
                     break;
                 case ConsoleKey.L:
-                    FileManager.LoadBoard(_board.Grid, _savePath);
+                    FileManager.LoadBoard(
+                        _board.Grid,
+                        Path.Combine(Program.GetProjectRootDirectory(), "Board.txt")
+                    );
                     _stableCounter = 0;
                     _generation = 0;
                     break;
@@ -266,42 +286,46 @@ namespace cli_life
                 [ConsoleKey.D4] = "ellipse.txt",
                 [ConsoleKey.D5] = "hive.txt"
             };
-
             if (map.TryGetValue(key, out var file))
-            {
-                var path = Path.Combine(Directory.GetCurrentDirectory(), "figures", file);
-                FileManager.LoadFigure(_board.Grid, path);
-            }
+                FileManager.LoadFigure(
+                    _board.Grid,
+                    Path.Combine(Directory.GetCurrentDirectory(), "figures", file)
+                );
         }
 
         private bool Update()
         {
-            Console.Clear();
-            Render();
-            _generation++;
-            Console.WriteLine($"\nGeneration: {_generation}");
+            if (!_silent)
+            {
+                Console.Clear();
+                Render();
+                Console.WriteLine($"\nGeneration: {_generation}");
+            }
 
+            _generation++;
             var (alive, clusters) = _board.Analyze();
-            Console.WriteLine($"Alive cells: {alive}, Clusters: {clusters}");
+
+            if (!_silent)
+                Console.WriteLine($"Alive: {alive}, Clusters: {clusters}");
 
             if (CheckStability(clusters))
             {
-                Console.WriteLine("\n Stable state reached.");
+                if (!_silent)
+                    Console.WriteLine("Stable state reached.");
                 return true;
             }
 
-            _board.Advance();
-            Thread.Sleep(1000);
+            _board.ProgressFrame();
             return false;
         }
 
         private void Render()
         {
             var sb = new StringBuilder();
-            for (int y = 0; y < _board.Rows; y++)
+            for (int y = 0; y < _board.TotalRows; y++)
             {
-                for (int x = 0; x < _board.Columns; x++)
-                    sb.Append(_board.Grid[x, y].IsAlive ? '*' : ' ');
+                for (int x = 0; x < _board.TotalColumns; x++)
+                    sb.Append(_board.Grid[x, y].FluxState ? '*' : ' ');
                 sb.AppendLine();
             }
             Console.Write(sb);
@@ -317,63 +341,43 @@ namespace cli_life
             else
             {
                 _stableCounter++;
-                if (_stableCounter >= StabilityThreshold)
-                    return true;
+                if (_stableCounter >= 5) return true;
             }
             return false;
         }
 
-        public void RunBatchAnalysis()
-        {
-            double startDensity = 0.1;
-            double maxDensity = 0.9;
-            int samplesPerDensity = 10;
-
-            var settings = ConfigLoader.LoadFromJson(_configPath);
-            string outputDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Results");
-            Directory.CreateDirectory(outputDirectory);
-
-            while (startDensity < maxDensity)
-            {
-                settings.InitialDensity = startDensity;
-                string fileName = $"avg_res{startDensity:0.0}.txt";
-                string filePath = Path.Combine(outputDirectory, fileName);
-                List<int> generations = new();
-
-                for (int i = 0; i < samplesPerDensity; i++)
-                {
-                    _board = new LifeBoard(settings.Width, settings.Height, settings.CellSize, settings.InitialDensity);
-                    _generation = 0;
-                    _stableCounter = 0;
-                    _previousClusters = 0;
-                    Run();
-                    generations.Add(_generation);
-                    File.AppendAllText(filePath, $"Run {i + 1}: Generations = {_generation}\n");
-                }
-                double avg = generations.Average();
-                File.AppendAllText(filePath, $"Average Generations: {Math.Round(avg)}\n");
-                startDensity += 0.1;
-            }
-        }
-
         public void GenerateDensityData()
         {
-            double density = 0.0;
-            double step = 0.02;
-            string output = Path.Combine(Directory.GetCurrentDirectory(), "data.txt");
-            File.WriteAllText(output, "Density  Generation\n");
+            double density = 0.0, step = 0.02;
+            var output = Path.Combine(Program.GetProjectRootDirectory(), "data.txt");
+            File.WriteAllText(output, "Density Generation\n");
 
             var settings = ConfigLoader.LoadFromJson(_configPath);
 
-            while (density <= 1.0)
+            while (density <= 1.0 + 1e-9)
             {
                 settings.InitialDensity = density;
-                _board = new LifeBoard(settings.Width, settings.Height, settings.CellSize, settings.InitialDensity);
+                _board = new LifeBoard(
+                    settings.HorizontalUnits,
+                    settings.VerticalUnits,
+                    settings.UnitDimension,
+                    settings.InitialDensity
+                );
+
                 _generation = 0;
                 _stableCounter = 0;
                 _previousClusters = 0;
-                Run();
-                File.AppendAllText(output, $"{Math.Round(density, 2)} {_generation}\n");
+
+                while (true)
+                {
+                    bool finished = Update();
+                    if (finished) break;
+                }
+
+                string densityStr = density.ToString("0.##", CultureInfo.InvariantCulture);
+                File.AppendAllText(output,
+                    $"{densityStr} {_generation}{Environment.NewLine}");
+
                 density += step;
             }
         }
